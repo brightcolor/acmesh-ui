@@ -56,24 +56,20 @@ acmesh-ui assumes a protected admin network. What it enforces in code:
 
 Full details in [docs/security.md](docs/security.md).
 
-## ⬇️ Install (prebuilt binary)
+## ⬇️ Install
 
-Binaries for `linux/amd64` and `linux/arm64` are built by GitHub Actions and
-attached to every [release](https://github.com/brightcolor/acmesh-ui/releases/latest).
-This one-liner picks the right architecture, downloads the latest binary,
-verifies its checksum and installs it globally to `/usr/local/bin`:
+One line — detects your architecture, verifies the checksum, and installs
+`acmesh-ui` to `/usr/local/bin`:
 
 ```sh
-ARCH=$(uname -m); case "$ARCH" in x86_64) ARCH=amd64;; aarch64|arm64) ARCH=arm64;; esac
-BASE="https://github.com/brightcolor/acmesh-ui/releases/latest/download"
-curl -fsSL "$BASE/acmesh-ui-linux-$ARCH" -o acmesh-ui
-curl -fsSL "$BASE/SHA256SUMS" | grep "acmesh-ui-linux-$ARCH" | sed "s| .*| acmesh-ui|" | sha256sum -c -
-sudo install -m 0755 acmesh-ui /usr/local/bin/acmesh-ui && rm acmesh-ui
-acmesh-ui version
+curl -fsSL https://raw.githubusercontent.com/brightcolor/acmesh-ui/main/install.sh | sh
 ```
 
-> Prefer to build it yourself? See [Build](#-build). Want a specific version?
-> Replace `latest/download` with `download/<tag>` (e.g. `download/v1.0.0`).
+Options: `VERSION=v1.0.0` for a specific release, `BINDIR=~/.local/bin` to change
+the target directory. Prefer to inspect first? The script is
+[`install.sh`](install.sh). Or grab a binary straight from the
+[releases page](https://github.com/brightcolor/acmesh-ui/releases/latest), or
+[build it yourself](#-build).
 
 ## 🚀 Quick start
 
