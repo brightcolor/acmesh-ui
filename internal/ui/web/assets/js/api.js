@@ -46,5 +46,7 @@ const API = (() => {
     updateDNS: (id, body) => req('PUT', '/api/dns-providers/' + encodeURIComponent(id), body),
     deleteDNS: (id) => req('DELETE', '/api/dns-providers/' + encodeURIComponent(id)),
     settings: () => req('GET', '/api/settings'),
+    updateCheck: () => req('GET', '/api/update/check'),
+    updateApply: () => req('POST', '/api/update/apply'),
   };
 })();

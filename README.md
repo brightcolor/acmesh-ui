@@ -103,6 +103,7 @@ acmesh-ui serve        [--config PATH]            Start the web server
 acmesh-ui init         [--config PATH] [--force]  Write a sample config
 acmesh-ui config check [--config PATH]            Validate the config
 acmesh-ui scan         [--config PATH]            Print a certificate summary
+acmesh-ui update       [--check]                  Self-update to the latest release
 acmesh-ui version                                 Version info
 ```
 
@@ -145,7 +146,11 @@ The frontend ships pre-built under `internal/ui/web/` (plain HTML/CSS/vanilla-JS
 
 - **Backup** `/etc/acmesh-ui/` (config + `secret.key`) and `/var/lib/acmesh-ui/` (jobs + DNS DB).
 - **Restore** with the **same `secret.key`** — otherwise stored DNS secrets cannot be decrypted.
-- **Upgrade** = replace the binary + `systemctl restart acmesh-ui`.
+- **Upgrade** = `sudo acmesh-ui update` (downloads + checksum-verifies the latest
+  release and replaces the binary), then `systemctl restart acmesh-ui`. You can
+  also update from the **System** page in the UI — it replaces the binary and
+  restarts the service in place, and the page reloads automatically once the new
+  version is up. Self-update needs write access to the binary's directory.
 
 ## What it deliberately does NOT do
 

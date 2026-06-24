@@ -47,6 +47,10 @@ func routes(h *api.Handlers) http.Handler {
 	mux.HandleFunc("GET /api/settings", h.Settings)
 	mux.HandleFunc("PUT /api/settings", h.UpdateSettings)
 
+	// Self-update
+	mux.HandleFunc("GET /api/update/check", h.UpdateCheck)
+	mux.HandleFunc("POST /api/update/apply", h.UpdateApply)
+
 	// Unknown API path -> JSON 404 (avoid serving the SPA shell for /api/*).
 	mux.HandleFunc("/api/", api.NotFound)
 

@@ -12,10 +12,12 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/bright-color/acmesh-ui/internal/acme"
 	"github.com/bright-color/acmesh-ui/internal/config"
 	"github.com/bright-color/acmesh-ui/internal/server"
+	"github.com/bright-color/acmesh-ui/internal/updater"
 	"github.com/bright-color/acmesh-ui/internal/version"
 )
 
@@ -38,6 +40,8 @@ func main() {
 		os.Exit(cmdConfig(args))
 	case "scan":
 		os.Exit(cmdScan(args))
+	case "update":
+		os.Exit(cmdUpdate(args))
 	case "version", "--version", "-v":
 		fmt.Println("acmesh-ui " + version.String())
 	case "help", "-h", "--help":
@@ -58,6 +62,7 @@ Usage:
                                            Write config.yaml (prompts for bind/port)
   acmesh-ui config check [--config PATH]   Validate the configuration
   acmesh-ui scan         [--config PATH]   Scan certificates and print a summary
+  acmesh-ui update       [--check]         Self-update to the latest release
   acmesh-ui version                        Print version information
 `)
 }
@@ -260,6 +265,42 @@ func cmdScan(args []string) int {
 	for _, c := range list {
 		fmt.Printf("  %-40s %-10s %4dd  %s\n", c.MainDomain, c.Status, c.DaysRemaining, c.KeyType)
 	}
+	return 0
+}
+
+func cmdUpdate(args []string) int {
+	fs := flag.NewFlagSet("update", flag.ExitOnError)
+	checkOnly := fs.Bool("check", false, "only check for a newer version, do not install")
+	_ = fs.Parse(args)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	chk, err := updater.Check(ctx, version.Version)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "update check failed: %v\n", err)
+		return 1
+	}
+	fmt.Printf("installed: %s\nlatest:    %s\n", chk.Current, chk.Latest)
+	if !chk.UpdateAvailable {
+		fmt.Println("already up to date.")
+		return 0
+	}
+	if *checkOnly {
+		fmt.Println("update available - run 'acmesh-ui update' to install.")
+		return 0
+	}
+	if !chk.CanSelfUpdate {
+		fmt.Fprintf(os.Stderr, "cannot replace the binary: %s\nTry: sudo acmesh-ui update\n", chk.Note)
+		return 1
+	}
+	fmt.Printf("downloading %s %s ...\n", chk.Asset, chk.Latest)
+	tag, err := updater.Apply(ctx, chk.Latest)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "update failed: %v\n", err)
+		return 1
+	}
+	fmt.Printf("updated to %s. Restart the service to run it: systemctl restart acmesh-ui\n", tag)
 	return 0
 }
 

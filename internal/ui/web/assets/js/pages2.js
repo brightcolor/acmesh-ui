@@ -368,10 +368,91 @@ Object.assign(Pages, (() => {
         <dt>Schreibbar</dt><dd>${yn(s.data_writable)}</dd>
         <dt>Config</dt><dd class="mono">${UI.esc(s.config_path || '–')}</dd>
       </dl></div>
+      <div class="card" id="update-card"><div class="card-title">Updates</div>
+        <div id="update-body"><div class="muted">Suche nach Updates…</div></div>
+      </div>
       <div class="card" style="grid-column:1/-1"><div class="card-title">Renewal-Mechanismen</div>
         <ul>${(s.renewal_hints || []).map(h => `<li class="muted">${UI.esc(h)}</li>`).join('')}</ul>
       </div></div>`;
     set(html);
+    loadUpdate();
+  }
+
+  async function loadUpdate() {
+    const body = document.getElementById('update-body');
+    if (!body) return;
+    let u;
+    try { u = await API.updateCheck(); }
+    catch (e) { body.innerHTML = `<div class="muted">Update-Prüfung nicht möglich: ${UI.esc((e && e.message) || 'Fehler')}</div>`; return; }
+
+    let html = `<dl class="kv">
+      <dt>Installiert</dt><dd class="mono">${UI.esc(u.current)}</dd>
+      <dt>Verfügbar</dt><dd class="mono">${UI.esc(u.latest || '–')}</dd>
+    </dl>`;
+    if (u.update_available) {
+      html += `<div class="alert alert-info alert-inline" style="margin-top:12px">Neue Version <span class="tag">${UI.esc(u.latest)}</span> verfügbar.</div>`;
+      if (u.can_self_update) {
+        html += `<button class="btn btn-primary" id="update-btn">Auf ${UI.esc(u.latest)} aktualisieren</button>`;
+      } else {
+        html += `<div class="alert alert-warn alert-inline">${UI.esc(u.note || 'Selbst-Update nicht möglich (Schreibrechte fehlen).')} Auf dem Host: <span class="tag">sudo acmesh-ui update</span></div>`;
+      }
+    } else {
+      html += `<div class="alert alert-info alert-inline" style="margin-top:12px">✓ Aktuell – kein Update verfügbar.</div>`;
+    }
+    body.innerHTML = html;
+    const btn = document.getElementById('update-btn');
+    if (btn) btn.onclick = () => confirmUpdate(u);
+  }
+
+  function confirmUpdate(u) {
+    UI.modal({
+      title: 'Update installieren',
+      confirmLabel: `Auf ${u.latest} aktualisieren`,
+      bodyHtml: `<p>Aktualisiert acmesh-ui von <span class="tag">${UI.esc(u.current)}</span> auf <span class="tag">${UI.esc(u.latest)}</span>.</p>
+        <p class="muted">Die Binary wird heruntergeladen, per SHA-256-Checksum geprüft und ersetzt.
+        ${u.restart_supported ? 'Anschließend startet die Anwendung neu und diese Seite lädt automatisch neu.' : 'Danach muss der Dienst manuell neu gestartet werden.'}</p>`,
+      onConfirm: async () => {
+        const r = await API.updateApply();
+        UI.closeModal();
+        if (r.restarting) waitForRestart(r.version);
+        else UI.toast('Update installiert (' + r.version + ') – Dienst manuell neu starten', 'ok');
+      },
+    });
+  }
+
+  // Overlay shown while the server re-execs; polls /api/status and reloads once
+  // the new version answers.
+  function waitForRestart(targetVersion) {
+    const ov = document.createElement('div');
+    ov.className = 'modal-overlay';
+    ov.style.display = 'flex';
+    ov.innerHTML = `<div class="modal" style="max-width:420px;text-align:center">
+      <div class="modal-body">
+        <div style="font-size:34px">⏳</div>
+        <h3 style="margin:.4em 0">Anwendung wird aktualisiert…</h3>
+        <p class="muted" id="restart-msg">Neue Version <span class="tag">${UI.esc(targetVersion)}</span> wird gestartet. Bitte warten.</p>
+      </div></div>`;
+    document.body.appendChild(ov);
+
+    const start = Date.now();
+    const tick = async () => {
+      if (Date.now() - start > 120000) {
+        document.getElementById('restart-msg').innerHTML = 'Zeitüberschreitung. Bitte Seite manuell neu laden.';
+        return;
+      }
+      try {
+        const s = await API.status();
+        // Server is back. If we know the version, wait until it matches; else reload.
+        if (!targetVersion || s.ui_version === targetVersion || s.ui_version !== undefined) {
+          document.getElementById('restart-msg').textContent = 'Fertig – lade neu…';
+          setTimeout(() => location.reload(), 600);
+          return;
+        }
+      } catch (e) { /* server still down, keep polling */ }
+      setTimeout(tick, 1500);
+    };
+    // Give the server a moment to drop the old listener before polling.
+    setTimeout(tick, 2000);
   }
 
   return { newCert, dns, dnsEdit, dnsDelete, jobs, jobDetail, cancelJob, settings, system };
