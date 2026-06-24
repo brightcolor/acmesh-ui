@@ -7,6 +7,8 @@
 Manage your TLS certificates from a clean, dark-first admin panel — issue, renew,
 install, deploy and monitor — without ever exposing a shell.
 
+[![CI](https://github.com/brightcolor/acmesh-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/brightcolor/acmesh-ui/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/brightcolor/acmesh-ui?sort=semver)](https://github.com/brightcolor/acmesh-ui/releases/latest)
 [![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![Single Binary](https://img.shields.io/badge/deploy-single%20binary-success)](#-build)
 [![No Docker](https://img.shields.io/badge/Docker-not%20required-informational)](#what-it-deliberately-does-not-do)
@@ -54,21 +56,37 @@ acmesh-ui assumes a protected admin network. What it enforces in code:
 
 Full details in [docs/security.md](docs/security.md).
 
+## ⬇️ Install (prebuilt binary)
+
+Binaries for `linux/amd64` and `linux/arm64` are built by GitHub Actions and
+attached to every [release](https://github.com/brightcolor/acmesh-ui/releases/latest).
+This one-liner picks the right architecture, downloads the latest binary,
+verifies its checksum and installs it globally to `/usr/local/bin`:
+
+```sh
+ARCH=$(uname -m); case "$ARCH" in x86_64) ARCH=amd64;; aarch64|arm64) ARCH=arm64;; esac
+BASE="https://github.com/brightcolor/acmesh-ui/releases/latest/download"
+curl -fsSL "$BASE/acmesh-ui-linux-$ARCH" -o acmesh-ui
+curl -fsSL "$BASE/SHA256SUMS" | grep "acmesh-ui-linux-$ARCH" | sed "s| .*| acmesh-ui|" | sha256sum -c -
+sudo install -m 0755 acmesh-ui /usr/local/bin/acmesh-ui && rm acmesh-ui
+acmesh-ui version
+```
+
+> Prefer to build it yourself? See [Build](#-build). Want a specific version?
+> Replace `latest/download` with `download/<tag>` (e.g. `download/v1.0.0`).
+
 ## 🚀 Quick start
 
 ```sh
 # 1. acme.sh must already be installed and working
 curl https://get.acme.sh | sh -s email=you@example.com
 
-# 2. Install the binary
-sudo install -m 0755 acmesh-ui /usr/local/bin/acmesh-ui
-
-# 3. Config
+# 2. Install acmesh-ui (see the one-liner above), then create the config
 sudo mkdir -p /etc/acmesh-ui /var/lib/acmesh-ui
 sudo acmesh-ui init  --config /etc/acmesh-ui/config.yaml
 sudo acmesh-ui config check --config /etc/acmesh-ui/config.yaml   # edit acme.binary / acme.home first
 
-# 4. Run (loopback by default)
+# 3. Run (loopback by default)
 acmesh-ui serve --config /etc/acmesh-ui/config.yaml
 ```
 
