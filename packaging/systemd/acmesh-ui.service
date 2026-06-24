@@ -1,0 +1,32 @@
+[Unit]
+Description=acmesh-ui - WebUI for acme.sh
+Documentation=https://github.com/bright-color/acmesh-ui
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Run as a dedicated user that can read the acme.sh home. See docs/install.md
+# for the recommended ownership model (own "acme" user).
+User=acmesh-ui
+Group=acmesh-ui
+
+ExecStart=/usr/local/bin/acmesh-ui serve --config /etc/acmesh-ui/config.yaml
+Restart=on-failure
+RestartSec=5
+
+# Hardening. ProtectHome=false because acme.sh frequently lives under a home
+# directory (e.g. /home/acme/.acme.sh or /root/.acme.sh).
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=false
+ReadWritePaths=/var/lib/acmesh-ui /var/log/acmesh-ui /etc/acmesh-ui
+WorkingDirectory=/var/lib/acmesh-ui
+
+# Tighten further if your acme.sh home allows it:
+# ProtectKernelTunables=true
+# ProtectControlGroups=true
+# RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

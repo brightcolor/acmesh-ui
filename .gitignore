@@ -1,0 +1,7 @@
+/acmesh-ui
+/acmesh-ui.exe
+/dist/
+/.dev/
+/.claude/
+*.db
+secret.key

@@ -1,0 +1,12 @@
+# Normalize all text to LF in the repository (this targets Linux).
+* text=auto eol=lf
+
+*.go    text eol=lf
+*.css   text eol=lf
+*.js    text eol=lf
+*.html  text eol=lf
+*.md    text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.service text eol=lf
+Makefile text eol=lf

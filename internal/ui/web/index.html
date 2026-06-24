@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>acmesh-ui</title>
+  <link rel="stylesheet" href="/assets/css/app.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🔐</text></svg>">
+</head>
+<body>
+  <div id="layout">
+    <!-- Sidebar -->
+    <aside id="sidebar">
+      <div class="brand">
+        <span class="brand-logo">🔐</span>
+        <span class="brand-name" id="brand-title">acmesh-ui</span>
+      </div>
+      <nav id="nav">
+        <a href="#/dashboard" data-route="dashboard"><span class="ico">▦</span> Dashboard</a>
+        <a href="#/certs" data-route="certs"><span class="ico">🛡</span> Zertifikate</a>
+        <a href="#/new" data-route="new"><span class="ico">＋</span> Neues Zertifikat</a>
+        <a href="#/dns" data-route="dns"><span class="ico">☁</span> DNS-Provider</a>
+        <a href="#/jobs" data-route="jobs"><span class="ico">⚙</span> Jobs</a>
+        <a href="#/settings" data-route="settings"><span class="ico">⚙</span> Einstellungen</a>
+        <a href="#/system" data-route="system"><span class="ico">❤</span> Systemstatus</a>
+      </nav>
+      <div class="sidebar-foot">
+        <div>acmesh-ui <span id="foot-ui-version">–</span></div>
+        <div>acme.sh <span id="foot-acme-version">–</span></div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <div id="main">
+      <header id="topbar">
+        <button id="sidebar-toggle" class="icon-btn" title="Menü">☰</button>
+        <h1 id="page-title">Dashboard</h1>
+        <div class="topbar-right">
+          <span id="auth-indicator" class="badge badge-hidden" title="Authentifizierung"></span>
+          <span id="acme-indicator" class="badge badge-gray" title="acme.sh Status">acme.sh</span>
+          <button id="refresh-btn" class="icon-btn" title="Aktualisieren">⟳</button>
+          <button id="theme-toggle" class="icon-btn" title="Dark/Light umschalten">🌙</button>
+        </div>
+      </header>
+
+      <div id="auth-warning" class="alert alert-warn" style="display:none">
+        <strong>Keine interne Authentifizierung aktiv.</strong>
+        <span id="auth-warning-text"></span>
+      </div>
+
+      <main id="content"><div class="loading">Lade…</div></main>
+
+      <footer id="footer">
+        <span>acmesh-ui <span id="footer-version">–</span></span>
+        <span id="footer-auth"></span>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toasts"></div>
+
+  <!-- Modal -->
+  <div id="modal-overlay" class="modal-overlay" style="display:none">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-head"><h3 id="modal-title">Bestätigen</h3>
+        <button class="icon-btn" id="modal-close">✕</button></div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-foot" id="modal-foot"></div>
+    </div>
+  </div>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/ui.js"></script>
+  <script src="/assets/js/pages.js"></script>
+  <script src="/assets/js/pages2.js"></script>
+  <script src="/assets/js/app.js"></script>
+</body>
+</html>

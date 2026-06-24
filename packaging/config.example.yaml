@@ -1,0 +1,64 @@
+# acmesh-ui example configuration
+# Copy to /etc/acmesh-ui/config.yaml and adjust.
+
+server:
+  # Bind to loopback by default. Reach the UI via SSH tunnel, VPN or a reverse
+  # proxy. To bind to a network address WITHOUT auth you must additionally set
+  # security.allow_open_without_auth: true (see below).
+  bind: "127.0.0.1"
+  port: 8090
+  public_url: ""
+
+auth:
+  # Version 1 fully supports "none". "basic" and "reverse_proxy" are reserved.
+  mode: "none"
+
+security:
+  # Required to start when bind is non-loopback AND auth.mode=none.
+  allow_open_without_auth: false
+  # AES key file for encrypting stored DNS secrets. Auto-created (0600) if missing.
+  secret_key_file: "/etc/acmesh-ui/secret.key"
+  # Permit operator-defined reload commands beyond the templates (still argv only).
+  allow_free_reloadcmd: false
+  # Optional: restrict --install-cert target paths.
+  cert_base_paths: []
+  # Optional: restrict HTTP-01 webroot paths.
+  webroot_base_paths: []
+
+acme:
+  binary: "/root/.acme.sh/acme.sh"
+  home: "/root/.acme.sh"
+  default_ca: ""
+  default_key_type: "ec-256"
+  default_webroot: ""
+
+jobs:
+  max_parallel: 2
+  log_retention_days: 30
+  timeout_seconds: 1800
+
+ui:
+  title: "acmesh-ui"
+  show_auth_warning: true
+
+certs:
+  expiring_soon_days: 30
+
+data:
+  dir: "/var/lib/acmesh-ui"
+
+# Allow-listed reload templates offered in the install-cert dialog.
+# Commands are argv arrays - never shell strings.
+reload_commands:
+  - name: "Reload nginx"
+    command: ["systemctl", "reload", "nginx"]
+  - name: "Reload Apache"
+    command: ["systemctl", "reload", "apache2"]
+  - name: "Reload HAProxy"
+    command: ["systemctl", "reload", "haproxy"]
+  - name: "Restart Postfix"
+    command: ["systemctl", "restart", "postfix"]
+  - name: "Restart Dovecot"
+    command: ["systemctl", "restart", "dovecot"]
+  - name: "Reload Caddy"
+    command: ["systemctl", "reload", "caddy"]
