@@ -3,11 +3,14 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/bright-color/acmesh-ui/internal/acme"
@@ -51,7 +54,8 @@ func usage() {
 
 Usage:
   acmesh-ui serve        [--config PATH]   Start the web server
-  acmesh-ui init         [--config PATH] [--force]   Write a sample config.yaml
+  acmesh-ui init         [--config PATH] [--force] [--bind IP] [--port N]
+                                           Write config.yaml (prompts for bind/port)
   acmesh-ui config check [--config PATH]   Validate the configuration
   acmesh-ui scan         [--config PATH]   Scan certificates and print a summary
   acmesh-ui version                        Print version information
@@ -92,19 +96,61 @@ func cmdInit(args []string) int {
 	fs := flag.NewFlagSet("init", flag.ExitOnError)
 	cfgPath := configFlag(fs)
 	force := fs.Bool("force", false, "overwrite an existing config file")
+	bindFlag := fs.String("bind", "", "listen interface (skips the prompt)")
+	portFlag := fs.Int("port", 0, "listen port (skips the prompt)")
 	_ = fs.Parse(args)
 
 	if _, err := os.Stat(*cfgPath); err == nil && !*force {
 		fmt.Fprintf(os.Stderr, "config %s already exists (use --force to overwrite)\n", *cfgPath)
 		return 1
 	}
+
+	cfg := config.Default()
+
+	// Determine bind/port: flags win; otherwise prompt interactively; otherwise
+	// fall back to the defaults (non-interactive stdin, e.g. piped input).
+	in := bufio.NewReader(os.Stdin)
+	interactive := isInteractive()
+
+	switch {
+	case *bindFlag != "":
+		cfg.Server.Bind = *bindFlag
+	case interactive:
+		fmt.Println("Configuring acmesh-ui. Press Enter to accept the default in [brackets].")
+		cfg.Server.Bind = prompt(in, "Listen interface (IP to bind, 127.0.0.1 = loopback only)", cfg.Server.Bind)
+	}
+
+	switch {
+	case *portFlag != 0:
+		cfg.Server.Port = *portFlag
+	case interactive:
+		cfg.Server.Port = promptPort(in, "Listen port", cfg.Server.Port)
+	}
+
+	if cfg.Server.Port < 1 || cfg.Server.Port > 65535 {
+		fmt.Fprintf(os.Stderr, "invalid port %d (must be 1-65535)\n", cfg.Server.Port)
+		return 1
+	}
+
+	// If the chosen bind is reachable from the network and auth is off, the
+	// server would refuse to start. Offer to acknowledge it now.
+	if cfg.IsOpenBind() && cfg.AuthDisabled() {
+		fmt.Printf("\nNote: bind=%s is reachable from the network and auth.mode=none.\n", cfg.Server.Bind)
+		fmt.Println("acmesh-ui will refuse to start unless this is explicitly acknowledged.")
+		if interactive && yesNo(in, "Set security.allow_open_without_auth=true now?", false) {
+			cfg.Security.AllowOpenWithoutAuth = true
+		} else {
+			fmt.Println("Leaving it disabled - restrict access via VPN/SSH tunnel/reverse proxy, or set it later in the config.")
+		}
+	}
+
 	if dir := dirOf(*cfgPath); dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			fmt.Fprintf(os.Stderr, "create config dir: %v\n", err)
 			return 1
 		}
 	}
-	data, err := config.Marshal(config.Default())
+	data, err := config.Marshal(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "marshal config: %v\n", err)
 		return 1
@@ -114,8 +160,62 @@ func cmdInit(args []string) int {
 		fmt.Fprintf(os.Stderr, "write config: %v\n", err)
 		return 1
 	}
-	fmt.Printf("wrote sample config to %s\n", *cfgPath)
+	fmt.Printf("\nwrote config to %s (bind=%s:%d)\n", *cfgPath, cfg.Server.Bind, cfg.Server.Port)
+	fmt.Println("Next: review acme.binary / acme.home, then 'acmesh-ui config check' and 'acmesh-ui serve'.")
 	return 0
+}
+
+// isInteractive reports whether stdin is a terminal (so prompting won't hang on
+// piped or redirected input).
+func isInteractive() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
+}
+
+// prompt asks question, showing def as the default, and returns the entered
+// value (or def if empty).
+func prompt(r *bufio.Reader, question, def string) string {
+	fmt.Printf("%s [%s]: ", question, def)
+	line, _ := r.ReadString('\n')
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return def
+	}
+	return line
+}
+
+// promptPort prompts for a port, re-asking on invalid input.
+func promptPort(r *bufio.Reader, question string, def int) int {
+	for {
+		s := prompt(r, question, strconv.Itoa(def))
+		n, err := strconv.Atoi(s)
+		if err == nil && n >= 1 && n <= 65535 {
+			return n
+		}
+		fmt.Println("  please enter a number between 1 and 65535")
+	}
+}
+
+// yesNo prompts a yes/no question with the given default.
+func yesNo(r *bufio.Reader, question string, def bool) bool {
+	hint := "y/N"
+	if def {
+		hint = "Y/n"
+	}
+	fmt.Printf("%s [%s]: ", question, hint)
+	line, _ := r.ReadString('\n')
+	line = strings.ToLower(strings.TrimSpace(line))
+	switch line {
+	case "":
+		return def
+	case "y", "yes":
+		return true
+	default:
+		return false
+	}
 }
 
 func cmdConfig(args []string) int {
