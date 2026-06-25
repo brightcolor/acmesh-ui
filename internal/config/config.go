@@ -16,14 +16,14 @@ type Config struct {
 
 // Server holds bind/listen settings.
 type Server struct {
-	Bind      string `yaml:"bind"`
-	Port      int    `yaml:"port"`
-	PublicURL string `yaml:"public_url"`
+	Bind      string `yaml:"bind" json:"bind"`
+	Port      int    `yaml:"port" json:"port"`
+	PublicURL string `yaml:"public_url" json:"public_url"`
 }
 
 // Auth selects the authentication mode. Version 1 fully supports "none".
 type Auth struct {
-	Mode string `yaml:"mode"` // none | basic | reverse_proxy
+	Mode string `yaml:"mode" json:"mode"` // none | basic | reverse_proxy
 }
 
 // Security gates open binding and points at the secret key file.
@@ -41,41 +41,41 @@ type Security struct {
 
 // Acme points at the external acme.sh installation.
 type Acme struct {
-	Binary         string `yaml:"binary"`
-	Home           string `yaml:"home"`
-	DefaultCA      string `yaml:"default_ca"`
-	DefaultKeyType string `yaml:"default_key_type"`
-	DefaultWebroot string `yaml:"default_webroot"`
+	Binary         string `yaml:"binary" json:"binary"`
+	Home           string `yaml:"home" json:"home"`
+	DefaultCA      string `yaml:"default_ca" json:"default_ca"`
+	DefaultKeyType string `yaml:"default_key_type" json:"default_key_type"`
+	DefaultWebroot string `yaml:"default_webroot" json:"default_webroot"`
 }
 
 // Jobs configures the background job runner.
 type Jobs struct {
-	MaxParallel      int `yaml:"max_parallel"`
-	LogRetentionDays int `yaml:"log_retention_days"`
+	MaxParallel      int `yaml:"max_parallel" json:"max_parallel"`
+	LogRetentionDays int `yaml:"log_retention_days" json:"log_retention_days"`
 	// TimeoutSeconds bounds a single acme.sh invocation. 0 => default.
-	TimeoutSeconds int `yaml:"timeout_seconds"`
+	TimeoutSeconds int `yaml:"timeout_seconds" json:"timeout_seconds"`
 }
 
 // UI configures cosmetic UI behaviour.
 type UI struct {
-	Title           string `yaml:"title"`
-	ShowAuthWarning bool   `yaml:"show_auth_warning"`
+	Title           string `yaml:"title" json:"title"`
+	ShowAuthWarning bool   `yaml:"show_auth_warning" json:"show_auth_warning"`
 }
 
 // ReloadCommand is an allow-listed reload template offered for --install-cert.
 type ReloadCommand struct {
-	Name    string   `yaml:"name"`
-	Command []string `yaml:"command"`
+	Name    string   `yaml:"name" json:"name"`
+	Command []string `yaml:"command" json:"command"`
 }
 
 // Data is where acmesh-ui keeps its own state.
 type Data struct {
-	Dir string `yaml:"dir"`
+	Dir string `yaml:"dir" json:"dir"`
 }
 
 // Certs tunes certificate expiry evaluation.
 type Certs struct {
-	ExpiringSoonDays int `yaml:"expiring_soon_days"`
+	ExpiringSoonDays int `yaml:"expiring_soon_days" json:"expiring_soon_days"`
 }
 
 // Default returns a Config populated with safe defaults.

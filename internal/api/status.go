@@ -10,38 +10,40 @@ import (
 
 // StatusResponse is returned by GET /api/status.
 type StatusResponse struct {
-	UIVersion    string   `json:"ui_version"`
-	AcmeVersion  string   `json:"acme_version"`
-	AcmePath     string   `json:"acme_path"`
-	AcmeHome     string   `json:"acme_home"`
-	AcmeFound    bool     `json:"acme_found"`
-	AuthMode     string   `json:"auth_mode"`
-	AuthDisabled bool     `json:"auth_disabled"`
-	OpenBind     bool     `json:"open_bind"`
-	Bind         string   `json:"bind"`
-	Port         int      `json:"port"`
-	Title        string   `json:"title"`
-	UptimeSec    int64    `json:"uptime_sec"`
-	Warnings     []string `json:"warnings"`
+	UIVersion       string   `json:"ui_version"`
+	AcmeVersion     string   `json:"acme_version"`
+	AcmePath        string   `json:"acme_path"`
+	AcmeHome        string   `json:"acme_home"`
+	AcmeFound       bool     `json:"acme_found"`
+	AuthMode        string   `json:"auth_mode"`
+	AuthDisabled    bool     `json:"auth_disabled"`
+	OpenBind        bool     `json:"open_bind"`
+	Bind            string   `json:"bind"`
+	Port            int      `json:"port"`
+	Title           string   `json:"title"`
+	UptimeSec       int64    `json:"uptime_sec"`
+	ShowAuthWarning bool     `json:"show_auth_warning"`
+	Warnings        []string `json:"warnings"`
 }
 
 // Status handles GET /api/status.
 func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
 	chk := h.Client.Check(r.Context())
 	resp := StatusResponse{
-		UIVersion:    h.UIVersion,
-		AcmeVersion:  chk.Version,
-		AcmePath:     h.Cfg.Acme.Binary,
-		AcmeHome:     h.Cfg.Acme.Home,
-		AcmeFound:    chk.BinaryExists && chk.Executable,
-		AuthMode:     h.Cfg.Auth.Mode,
-		AuthDisabled: h.Cfg.AuthDisabled(),
-		OpenBind:     h.Cfg.IsOpenBind(),
-		Bind:         h.Cfg.Server.Bind,
-		Port:         h.Cfg.Server.Port,
-		Title:        h.Cfg.UI.Title,
-		UptimeSec:    int64(time.Since(h.Started).Seconds()),
-		Warnings:     h.warnings(chk.BinaryExists && chk.Executable),
+		UIVersion:       h.UIVersion,
+		AcmeVersion:     chk.Version,
+		AcmePath:        h.Cfg.Acme.Binary,
+		AcmeHome:        h.Cfg.Acme.Home,
+		AcmeFound:       chk.BinaryExists && chk.Executable,
+		AuthMode:        h.Cfg.Auth.Mode,
+		AuthDisabled:    h.Cfg.AuthDisabled(),
+		OpenBind:        h.Cfg.IsOpenBind(),
+		Bind:            h.Cfg.Server.Bind,
+		Port:            h.Cfg.Server.Port,
+		Title:           h.Cfg.UI.Title,
+		UptimeSec:       int64(time.Since(h.Started).Seconds()),
+		ShowAuthWarning: h.Cfg.UI.ShowAuthWarning,
+		Warnings:        h.warnings(chk.BinaryExists && chk.Executable),
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -126,7 +128,8 @@ func (h *Handlers) Dashboard(w http.ResponseWriter, r *http.Request) {
 		AuthMode: h.Cfg.Auth.Mode, AuthDisabled: h.Cfg.AuthDisabled(),
 		OpenBind: h.Cfg.IsOpenBind(), Bind: h.Cfg.Server.Bind, Port: h.Cfg.Server.Port,
 		Title: h.Cfg.UI.Title, UptimeSec: int64(time.Since(h.Started).Seconds()),
-		Warnings: h.warnings(chk.BinaryExists && chk.Executable),
+		ShowAuthWarning: h.Cfg.UI.ShowAuthWarning,
+		Warnings:        h.warnings(chk.BinaryExists && chk.Executable),
 	}
 
 	if all, err := h.Jobs.List(); err == nil {

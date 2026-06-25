@@ -1,6 +1,37 @@
 package config
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
+
+// TestJSONKeysSnakeCase guards against the settings page showing "undefined":
+// the config structs must serialize with snake_case JSON keys (not Go field
+// names), because the frontend reads e.g. server.bind / jobs.max_parallel.
+func TestJSONKeysSnakeCase(t *testing.T) {
+	data, err := json.Marshal(Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(data)
+	for _, key := range []string{
+		`"bind"`, `"port"`, `"mode"`, `"binary"`, `"home"`,
+		`"default_ca"`, `"default_key_type"`, `"max_parallel"`,
+		`"timeout_seconds"`, `"log_retention_days"`, `"expiring_soon_days"`,
+		`"name"`, `"command"`,
+	} {
+		if !strings.Contains(s, key) {
+			t.Errorf("expected config JSON to contain key %s; got: %s", key, s)
+		}
+	}
+	// Must NOT leak Go field names.
+	for _, bad := range []string{`"Bind"`, `"MaxParallel"`, `"DefaultKeyType"`} {
+		if strings.Contains(s, bad) {
+			t.Errorf("config JSON leaked Go field name %s", bad)
+		}
+	}
+}
 
 func TestValidateOpenBindGate(t *testing.T) {
 	c := Default()

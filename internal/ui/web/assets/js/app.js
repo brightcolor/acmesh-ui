@@ -59,15 +59,24 @@
 
       const authInd = document.getElementById('auth-indicator');
       const warn = document.getElementById('auth-warning');
-      if (s.auth_disabled) {
+      // The auth hints are shown only when auth is disabled AND the config flag
+      // ui.show_auth_warning is on AND the user has not dismissed them.
+      const dismissed = localStorage.getItem('acmesh-hide-auth-warning') === '1';
+      const showHints = s.auth_disabled && s.show_auth_warning !== false && !dismissed;
+      if (showHints) {
         authInd.className = 'badge badge-yellow dot'; authInd.textContent = 'Auth: aus';
         warn.style.display = 'block';
         document.getElementById('auth-warning-text').textContent =
           ' Zugriff nur über VPN / SSH-Tunnel / Reverse-Proxy absichern.' +
           (s.open_bind ? ' ACHTUNG: an ' + s.bind + ' gebunden (netzwerkweit erreichbar)!' : '');
         document.getElementById('footer-auth').textContent = 'Auth deaktiviert';
-      } else {
+      } else if (!s.auth_disabled) {
         authInd.className = 'badge badge-green dot'; authInd.textContent = 'Auth: ' + s.auth_mode;
+        warn.style.display = 'none';
+        document.getElementById('footer-auth').textContent = '';
+      } else {
+        // auth disabled but hints suppressed: hide everything quietly.
+        authInd.className = 'badge badge-hidden';
         warn.style.display = 'none';
         document.getElementById('footer-auth').textContent = '';
       }
@@ -82,6 +91,10 @@
     document.getElementById('refresh-btn').onclick = async () => {
       try { await API.scan(); } catch (e) {}
       await refreshStatus(); navigate(); UI.toast('Aktualisiert', 'ok');
+    };
+    document.getElementById('auth-warning-dismiss').onclick = () => {
+      localStorage.setItem('acmesh-hide-auth-warning', '1');
+      refreshStatus();
     };
     window.addEventListener('hashchange', navigate);
     refreshStatus();
