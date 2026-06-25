@@ -103,6 +103,20 @@ func (h *Handlers) invalidateCerts() {
 	h.mu.Unlock()
 }
 
+// submitJob enqueues a job and invalidates the certificate cache once the job
+// finishes, so the list/dashboard reflect issued/renewed/removed certs without
+// waiting for the cache TTL. Any existing OnDone is preserved.
+func (h *Handlers) submitJob(req jobs.Request) (jobs.Job, error) {
+	prev := req.OnDone
+	req.OnDone = func() {
+		h.invalidateCerts()
+		if prev != nil {
+			prev()
+		}
+	}
+	return h.Jobs.Submit(req)
+}
+
 func (h *Handlers) findCert(id string) (certs.Cert, bool) {
 	list, err := h.certs(false)
 	if err != nil {

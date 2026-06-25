@@ -64,6 +64,12 @@ func (m *Manager) runCommand(ctx context.Context, job *Job, req Request, lb *log
 	}
 
 	_ = m.store.save(*job)
+
+	// Notify the caller (e.g. to invalidate a cert cache) now that the final
+	// state - including any purge - is persisted.
+	if req.OnDone != nil {
+		req.OnDone()
+	}
 }
 
 // purgeDir removes a certificate directory after re-checking that it lives

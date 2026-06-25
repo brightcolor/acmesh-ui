@@ -76,7 +76,7 @@ func (h *Handlers) SetDefaultCA(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "INVALID_CA", "The CA is not valid.", err.Error())
 		return
 	}
-	job, err := h.Jobs.Submit(jobs.Request{Type: "set-default-ca", Command: cmd})
+	job, err := h.submitJob(jobs.Request{Type: "set-default-ca", Command: cmd})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "JOB_SUBMIT_FAILED", "Could not start the job.", err.Error())
 		return

@@ -239,12 +239,12 @@ const Pages = (() => {
       title: 'Zertifikat löschen', danger: true, confirmLabel: 'Zertifikat löschen',
       bodyHtml: `<p>Entfernt <span class="tag">${UI.esc(domain)}</span> aus der acme.sh-Verwaltung (kein Auto-Renewal mehr).</p>
         ${UI.codeblock('acme.sh --remove -d ' + domain)}
-        <div class="checkbox" style="margin-top:12px"><input type="checkbox" id="del-purge"><label style="margin:0" for="del-purge">Zertifikatsdateien ebenfalls von der Festplatte löschen</label></div>
-        <div class="alert alert-warn alert-inline" style="margin-top:10px">Installierte Kopien (z. B. in /etc/ssl) bleiben unberührt — nur das acme.sh-Verzeichnis wird betroffen.</div>`,
+        <div class="checkbox" style="margin-top:12px"><input type="checkbox" id="del-purge" checked><label style="margin:0" for="del-purge">Zertifikatsdateien von der Festplatte löschen (empfohlen)</label></div>
+        <div class="alert alert-warn alert-inline" style="margin-top:10px"><strong>Hinweis:</strong> Ohne diese Option entfernt <span class="tag">--remove</span> das Zertifikat nur aus der Renewal-Verwaltung — die Dateien bleiben liegen und das Zertifikat erscheint weiterhin in der Liste. Installierte Kopien (z. B. in /etc/ssl) bleiben in beiden Fällen unberührt.</div>`,
       onConfirm: async () => {
         const purge = document.getElementById('del-purge').checked;
         const r = await API.deleteCert(id, purge);
-        UI.toast('Löschen gestartet', 'ok');
+        UI.toast(purge ? 'Zertifikat wird gelöscht…' : 'Aus Verwaltung entfernt…', 'ok');
         location.hash = '#/jobs/' + r.job_id;
       },
     });

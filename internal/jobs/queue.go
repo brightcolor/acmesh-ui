@@ -44,6 +44,10 @@ type Request struct {
 	// by certificate deletion). It is re-validated against the acme.sh home in
 	// the runner before removal.
 	PurgeDir string
+	// OnDone, if set, runs after the job finishes (success or failure) and its
+	// final state and any purge have been persisted. Used to invalidate caches.
+	// It is not persisted with the job.
+	OnDone func()
 }
 
 // NewManager constructs a job manager.

@@ -64,7 +64,7 @@ func (h *Handlers) InstallCert(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"preview": preview})
 		return
 	}
-	job, err := h.Jobs.Submit(jobs.Request{Type: "install-cert", Domain: c.MainDomain, Command: cmd})
+	job, err := h.submitJob(jobs.Request{Type: "install-cert", Domain: c.MainDomain, Command: cmd})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "JOB_SUBMIT_FAILED", "Could not start the install job.", err.Error())
 		return
@@ -129,7 +129,7 @@ func (h *Handlers) DeployCert(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"preview": preview})
 		return
 	}
-	job, err := h.Jobs.Submit(jobs.Request{Type: "deploy", Domain: c.MainDomain, Command: cmd, SecretValues: secretValues})
+	job, err := h.submitJob(jobs.Request{Type: "deploy", Domain: c.MainDomain, Command: cmd, SecretValues: secretValues})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "JOB_SUBMIT_FAILED", "Could not start the deploy job.", err.Error())
 		return

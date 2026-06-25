@@ -140,7 +140,7 @@ func (h *Handlers) IssueCert(w http.ResponseWriter, r *http.Request) {
 
 	// cmd.Env already carries the DNS provider variables; secretValues are
 	// registered with the masker so they never appear in logs.
-	job, err := h.Jobs.Submit(jobs.Request{
+	job, err := h.submitJob(jobs.Request{
 		Type:         "issue",
 		Domain:       firstDomain(req.Domains),
 		Command:      cmd,
@@ -179,7 +179,7 @@ func (h *Handlers) renew(w http.ResponseWriter, r *http.Request, force bool) {
 	if force {
 		jobType = "force-renew"
 	}
-	job, err := h.Jobs.Submit(jobs.Request{Type: jobType, Domain: c.MainDomain, Command: cmd})
+	job, err := h.submitJob(jobs.Request{Type: jobType, Domain: c.MainDomain, Command: cmd})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "JOB_SUBMIT_FAILED", "Could not start the renew job.", err.Error())
 		return
@@ -215,12 +215,13 @@ func (h *Handlers) DeleteCert(w http.ResponseWriter, r *http.Request) {
 		req.PurgeDir = c.DomainDir
 	}
 
-	job, err := h.Jobs.Submit(req)
+	// submitJob invalidates the cert cache when the job (and any purge) finishes,
+	// so the list reflects the deletion without waiting for the cache TTL.
+	job, err := h.submitJob(req)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "JOB_SUBMIT_FAILED", "Could not start the remove job.", err.Error())
 		return
 	}
-	h.invalidateCerts()
 	writeJSON(w, http.StatusAccepted, map[string]any{"job_id": job.ID, "purged": purge})
 }
 
@@ -240,7 +241,7 @@ func dirWithin(dir, base string) bool {
 // RenewAll handles POST /api/certs/renew-all.
 func (h *Handlers) RenewAll(w http.ResponseWriter, r *http.Request) {
 	cmd := h.Builder.RenewAll()
-	job, err := h.Jobs.Submit(jobs.Request{Type: "renew-all", Command: cmd})
+	job, err := h.submitJob(jobs.Request{Type: "renew-all", Command: cmd})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "JOB_SUBMIT_FAILED", "Could not start renew-all.", err.Error())
 		return
