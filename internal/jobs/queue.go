@@ -45,9 +45,10 @@ type Request struct {
 	// the runner before removal.
 	PurgeDir string
 	// OnDone, if set, runs after the job finishes (success or failure) and its
-	// final state and any purge have been persisted. Used to invalidate caches.
-	// It is not persisted with the job.
-	OnDone func()
+	// final state and any purge have been persisted. It receives the final job
+	// so callers can act on the outcome (e.g. clean up after a successful
+	// re-issue). Not persisted with the job.
+	OnDone func(Job)
 }
 
 // NewManager constructs a job manager.

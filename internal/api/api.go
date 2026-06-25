@@ -108,10 +108,10 @@ func (h *Handlers) invalidateCerts() {
 // waiting for the cache TTL. Any existing OnDone is preserved.
 func (h *Handlers) submitJob(req jobs.Request) (jobs.Job, error) {
 	prev := req.OnDone
-	req.OnDone = func() {
+	req.OnDone = func(j jobs.Job) {
 		h.invalidateCerts()
 		if prev != nil {
-			prev()
+			prev(j)
 		}
 	}
 	return h.Jobs.Submit(req)

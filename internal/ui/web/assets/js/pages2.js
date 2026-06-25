@@ -28,7 +28,7 @@ Object.assign(Pages, (() => {
       ...wiz.dnsProviders.map(p => p.code),
     ]));
     const html = `
-      ${pf && pf.reissueOf ? `<div class="alert alert-info alert-inline">Re-Issue von <span class="tag">${UI.esc(pf.reissueOf)}</span> — Werte vorbefüllt. Änderungen (Domains/Challenge) werden beim Ausstellen übernommen.</div>` : ''}
+      ${pf && pf.reissueOf ? `<div class="alert alert-info alert-inline">Re-Issue von <span class="tag">${UI.esc(pf.reissueOf)}</span> — Werte vorbefüllt. Änderungen (Domains/Challenge) werden beim Ausstellen übernommen. Wird die Hauptdomain geändert, wird das alte Zertifikat nach erfolgreicher Ausstellung automatisch entfernt.</div>` : ''}
       <div class="card">
         <form id="wizform">
           <div class="form-row"><label>Hauptdomain</label><input type="text" id="w-main" placeholder="example.com" required></div>
@@ -154,6 +154,7 @@ Object.assign(Pages, (() => {
       ca: document.getElementById('w-ca').value,
       staging: document.getElementById('w-staging').checked,
       force: document.getElementById('w-force').checked,
+      reissue_of: (wiz.prefill && wiz.prefill.reissueOf) || '',
     };
     if (body.challenge === 'dns') {
       const src = document.getElementById('w-dns-source').value;

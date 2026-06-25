@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -153,6 +154,61 @@ func TestDeleteCertWithPurge(t *testing.T) {
 		if c.MainDomain == "example.com" {
 			t.Fatalf("cert still present in cached list after delete+purge (cache not invalidated on completion)")
 		}
+	}
+}
+
+func TestReissueRemovesOldCertOnDomainChange(t *testing.T) {
+	acmeBin := buildFakeAcme(t)
+	home := t.TempDir()
+	makeCertDir(t, home, "old.example.com_ecc", "old.example.com")
+	h := newTestHandlers(t, home, acmeBin)
+
+	if _, ok := h.findCert("old.example.com"); !ok {
+		t.Fatalf("old cert not found before re-issue")
+	}
+
+	body := `{"domains":["new.example.com"],"challenge":"standalone","reissue_of":"old.example.com"}`
+	req := httptest.NewRequest("POST", "/api/certs", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.IssueCert(w, req)
+	if w.Code != 202 {
+		t.Fatalf("issue status: got %d body %s", w.Code, w.Body.String())
+	}
+
+	// The issue job succeeds (fake acme) -> OnDone removes the old cert + purges
+	// its directory.
+	oldDir := filepath.Join(home, "old.example.com_ecc")
+	deadline := time.Now().Add(8 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(oldDir); os.IsNotExist(err) {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if _, err := os.Stat(oldDir); !os.IsNotExist(err) {
+		t.Fatalf("old cert directory was not removed after re-issue")
+	}
+}
+
+func TestReissueSameDomainKeepsCert(t *testing.T) {
+	acmeBin := buildFakeAcme(t)
+	home := t.TempDir()
+	makeCertDir(t, home, "example.com_ecc", "example.com")
+	h := newTestHandlers(t, home, acmeBin)
+
+	body := `{"domains":["example.com","www.example.com"],"challenge":"standalone","reissue_of":"example.com"}`
+	req := httptest.NewRequest("POST", "/api/certs", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.IssueCert(w, req)
+	if w.Code != 202 {
+		t.Fatalf("issue status: got %d body %s", w.Code, w.Body.String())
+	}
+	time.Sleep(1 * time.Second)
+	// Same main domain -> in-place update, the directory must remain.
+	if _, err := os.Stat(filepath.Join(home, "example.com_ecc")); err != nil {
+		t.Fatalf("cert dir must remain on same-domain re-issue: %v", err)
 	}
 }
 

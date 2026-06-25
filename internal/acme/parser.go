@@ -2,6 +2,7 @@ package acme
 
 import (
 	"bufio"
+	"encoding/base64"
 	"strings"
 )
 
@@ -103,7 +104,23 @@ func ParseDomainConf(content string) map[string]string {
 		key := strings.TrimSpace(line[:eq])
 		val := strings.TrimSpace(line[eq+1:])
 		val = strings.Trim(val, "'\"")
-		conf[key] = val
+		conf[key] = DecodeAcmeValue(val)
 	}
 	return conf
+}
+
+// DecodeAcmeValue decodes acme.sh's base64-wrapped config values. acme.sh stores
+// values that may contain special characters (notably the install reload
+// command) as `__ACME_BASE64__START_<base64>__ACME_BASE64__END_`. Plain values
+// are returned unchanged.
+func DecodeAcmeValue(v string) string {
+	const start = "__ACME_BASE64__START_"
+	const end = "__ACME_BASE64__END_"
+	if strings.HasPrefix(v, start) && strings.HasSuffix(v, end) {
+		b64 := v[len(start) : len(v)-len(end)]
+		if dec, err := base64.StdEncoding.DecodeString(b64); err == nil {
+			return strings.TrimRight(string(dec), "\n")
+		}
+	}
+	return v
 }

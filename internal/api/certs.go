@@ -75,6 +75,10 @@ type IssueRequest struct {
 	Staging       bool     `json:"staging"`
 	Force         bool     `json:"force"`
 	Preview       bool     `json:"preview"` // if true, only return the command preview
+	// ReissueOf is the id/domain of the certificate this issue replaces. When the
+	// re-issue changes the main domain, the old certificate is removed (and its
+	// directory purged) after the new one is issued successfully.
+	ReissueOf string `json:"reissue_of"`
 }
 
 // IssueCert handles POST /api/certs.
@@ -138,19 +142,50 @@ func (h *Handlers) IssueCert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	newMain := firstDomain(req.Domains)
+
 	// cmd.Env already carries the DNS provider variables; secretValues are
 	// registered with the masker so they never appear in logs.
-	job, err := h.submitJob(jobs.Request{
+	issueReq := jobs.Request{
 		Type:         "issue",
-		Domain:       firstDomain(req.Domains),
+		Domain:       newMain,
 		Command:      cmd,
 		SecretValues: secretValues,
-	})
+	}
+
+	// Re-issue cleanup: if this issue replaces an existing cert and the main
+	// domain changed, the old cert directory is now orphaned. Remove it once the
+	// new cert has been issued successfully.
+	if req.ReissueOf != "" {
+		if old, ok := h.findCert(req.ReissueOf); ok && !strings.EqualFold(old.MainDomain, newMain) {
+			issueReq.OnDone = func(j jobs.Job) {
+				if j.Status == jobs.StatusSuccess {
+					h.removeOldCert(old)
+				}
+			}
+		}
+	}
+
+	job, err := h.submitJob(issueReq)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "JOB_SUBMIT_FAILED", "Could not start the issuance job.", err.Error())
 		return
 	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"job_id": job.ID, "preview": preview})
+}
+
+// removeOldCert runs `acme.sh --remove` for an orphaned certificate and purges
+// its directory. Used after a successful re-issue that changed the main domain.
+func (h *Handlers) removeOldCert(old certs.Cert) {
+	cmd, err := h.Builder.Remove(old.MainDomain, old.Ecc)
+	if err != nil {
+		return
+	}
+	req := jobs.Request{Type: "remove", Domain: old.MainDomain, Command: cmd}
+	if dirWithin(old.DomainDir, h.Cfg.Acme.Home) {
+		req.PurgeDir = old.DomainDir
+	}
+	_, _ = h.submitJob(req)
 }
 
 // RenewCert handles POST /api/certs/{id}/renew.

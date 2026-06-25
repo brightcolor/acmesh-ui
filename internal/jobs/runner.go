@@ -68,7 +68,7 @@ func (m *Manager) runCommand(ctx context.Context, job *Job, req Request, lb *log
 	// Notify the caller (e.g. to invalidate a cert cache) now that the final
 	// state - including any purge - is persisted.
 	if req.OnDone != nil {
-		req.OnDone()
+		req.OnDone(*job)
 	}
 }
 
