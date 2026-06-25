@@ -4,12 +4,22 @@ package dnsproviders
 
 import "time"
 
+// Source distinguishes how a provider's credentials are held.
+const (
+	// SourceManaged means acmesh-ui stores the (encrypted) env itself.
+	SourceManaged = "managed"
+	// SourceAcmeSaved means the credentials live in acme.sh's account.conf
+	// (SAVED_*); acmesh-ui stores no env and lets acme.sh supply them.
+	SourceAcmeSaved = "acme_saved"
+)
+
 // Provider is a stored DNS-01 configuration.
 type Provider struct {
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`
 	Code        string    `json:"code"` // acme.sh provider code, e.g. dns_cf
 	Description string    `json:"description,omitempty"`
+	Source      string    `json:"source"` // managed | acme_saved
 	Env         []EnvVar  `json:"env"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`

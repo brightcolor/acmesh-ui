@@ -171,6 +171,20 @@ func (b Builder) RenewAll() Command {
 	return Command{Action: "renew-all", Args: []string{"--renew-all"}}
 }
 
+// Remove builds `acme.sh --remove -d <domain> [--ecc]`. This stops acme.sh from
+// managing/renewing the certificate; the on-disk files are left untouched (the
+// caller decides whether to purge the domain directory separately).
+func (b Builder) Remove(domain string, ecc bool) (Command, error) {
+	if err := validate.DomainOrWildcard(domain); err != nil {
+		return Command{}, err
+	}
+	args := []string{"--remove", "-d", domain}
+	if ecc {
+		args = append(args, "--ecc")
+	}
+	return Command{Action: "remove", Args: args}, nil
+}
+
 // InstallSpec describes an --install-cert request.
 type InstallSpec struct {
 	Domain        string

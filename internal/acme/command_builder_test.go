@@ -131,6 +131,27 @@ func TestDeploy(t *testing.T) {
 	}
 }
 
+func TestRemove(t *testing.T) {
+	b := Builder{}
+	cmd, err := b.Remove("example.com", false)
+	if err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if !argsEqual(cmd.Args, []string{"--remove", "-d", "example.com"}) {
+		t.Fatalf("got %v", cmd.Args)
+	}
+	ecc, err := b.Remove("example.com", true)
+	if err != nil {
+		t.Fatalf("remove ecc: %v", err)
+	}
+	if !argsEqual(ecc.Args, []string{"--remove", "-d", "example.com", "--ecc"}) {
+		t.Fatalf("ecc got %v", ecc.Args)
+	}
+	if _, err := b.Remove("bad;domain", false); err == nil {
+		t.Fatalf("expected invalid domain to be rejected")
+	}
+}
+
 func TestSetDefaultCA(t *testing.T) {
 	b := Builder{}
 	if _, err := b.SetDefaultCA("letsencrypt"); err != nil {

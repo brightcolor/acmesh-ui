@@ -19,16 +19,21 @@ func routes(h *api.Handlers) http.Handler {
 	mux.HandleFunc("POST /api/scan", h.Scan)
 	mux.HandleFunc("GET /api/acme/version", h.AcmeVersion)
 	mux.HandleFunc("GET /api/acme/check", h.AcmeCheck)
+	mux.HandleFunc("POST /api/acme/default-ca", h.SetDefaultCA)
 
 	// Certificates
 	mux.HandleFunc("GET /api/certs", h.ListCerts)
 	mux.HandleFunc("POST /api/certs", h.IssueCert)
 	mux.HandleFunc("POST /api/certs/renew-all", h.RenewAll)
 	mux.HandleFunc("GET /api/certs/{id}", h.GetCert)
+	mux.HandleFunc("DELETE /api/certs/{id}", h.DeleteCert)
 	mux.HandleFunc("POST /api/certs/{id}/renew", h.RenewCert)
 	mux.HandleFunc("POST /api/certs/{id}/force-renew", h.ForceRenewCert)
 	mux.HandleFunc("POST /api/certs/{id}/install", h.InstallCert)
 	mux.HandleFunc("POST /api/certs/{id}/deploy", h.DeployCert)
+	mux.HandleFunc("GET /api/certs/{id}/pem", h.CertPem)
+	mux.HandleFunc("GET /api/certs/{id}/download", h.CertDownload)
+	mux.HandleFunc("GET /api/certs/{id}/tls-check", h.TLSCheck)
 
 	// Jobs
 	mux.HandleFunc("GET /api/jobs", h.ListJobs)
@@ -38,6 +43,8 @@ func routes(h *api.Handlers) http.Handler {
 
 	// DNS providers
 	mux.HandleFunc("GET /api/dns-providers", h.ListDNSProviders)
+	mux.HandleFunc("GET /api/dns-providers/detected", h.DetectedDNS)
+	mux.HandleFunc("POST /api/dns-providers/import", h.ImportDNS)
 	mux.HandleFunc("POST /api/dns-providers", h.CreateDNSProvider)
 	mux.HandleFunc("GET /api/dns-providers/{id}", h.GetDNSProvider)
 	mux.HandleFunc("PUT /api/dns-providers/{id}", h.UpdateDNSProvider)

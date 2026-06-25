@@ -40,6 +40,10 @@ type Request struct {
 	ExtraEnv []string // additional KEY=VALUE (e.g. decrypted DNS secrets) - not persisted
 	// SecretValues are registered with the masker so they never leak to logs.
 	SecretValues []string
+	// PurgeDir, if set, is a directory removed after the command succeeds (used
+	// by certificate deletion). It is re-validated against the acme.sh home in
+	// the runner before removal.
+	PurgeDir string
 }
 
 // NewManager constructs a job manager.

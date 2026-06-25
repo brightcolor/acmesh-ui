@@ -4,13 +4,16 @@ Object.assign(Pages, (() => {
   const set = (html) => { el().innerHTML = html; };
 
   // ---------- New certificate wizard ----------
-  let wiz = { step: 1, dnsProviders: [], settings: null };
+  let wiz = { step: 1, dnsProviders: [], detected: [], settings: null, prefill: null };
   async function newCert() {
     set('<div class="loading">Lade…</div>');
+    // Consume any pending re-issue prefill set by Pages.reissue().
+    wiz.prefill = Pages._prefill; Pages._prefill = null;
     try {
       const d = await API.dnsProviders();
       wiz.dnsProviders = d.providers || [];
       wiz.settings = await API.settings();
+      try { wiz.detected = (await API.dnsDetected()).detected || []; } catch (e) { wiz.detected = []; }
     } catch (e) { return UI.apiError(e); }
     wiz.step = 1;
     renderWizard();
@@ -18,11 +21,14 @@ Object.assign(Pages, (() => {
 
   function renderWizard() {
     const def = wiz.settings || { acme: {} };
+    const pf = wiz.prefill;
+    // DNS code suggestions: detected in acme.sh + known managed provider codes.
+    const codes = Array.from(new Set([
+      ...wiz.detected.map(d => d.code),
+      ...wiz.dnsProviders.map(p => p.code),
+    ]));
     const html = `
-      <div class="steps">
-        ${['Domains', 'Challenge', 'Optionen', 'Vorschau'].map((s, i) =>
-          `<span class="step ${wiz.step === i + 1 ? 'active' : ''}">${i + 1}. ${s}</span>`).join('')}
-      </div>
+      ${pf && pf.reissueOf ? `<div class="alert alert-info alert-inline">Re-Issue von <span class="tag">${UI.esc(pf.reissueOf)}</span> — Werte vorbefüllt. Änderungen (Domains/Challenge) werden beim Ausstellen übernommen.</div>` : ''}
       <div class="card">
         <form id="wizform">
           <div class="form-row"><label>Hauptdomain</label><input type="text" id="w-main" placeholder="example.com" required></div>
@@ -38,9 +44,23 @@ Object.assign(Pages, (() => {
             </select>
           </div>
           <div class="form-row" id="w-webroot-row"><label>Webroot-Pfad</label><input type="text" id="w-webroot" value="${UI.esc(def.acme.default_webroot || '')}" placeholder="/var/www/example/web"></div>
-          <div class="form-row" id="w-dns-row" style="display:none"><label>DNS-Provider</label>
-            <select id="w-dns">${wiz.dnsProviders.map(p => `<option value="${UI.esc(p.id)}">${UI.esc(p.name)} (${UI.esc(p.code)})</option>`).join('')}</select>
-            <div class="help">${wiz.dnsProviders.length ? '' : 'Noch kein DNS-Provider angelegt — unter „DNS-Provider“ konfigurieren.'}</div>
+
+          <div id="w-dns-row" style="display:none">
+            <div class="form-row"><label>DNS-Zugangsdaten</label>
+              <select id="w-dns-source">
+                <option value="provider">Gespeicherter Provider (acmesh-ui)</option>
+                <option value="saved">In acme.sh gespeicherte Zugangsdaten verwenden</option>
+              </select>
+            </div>
+            <div class="form-row" id="w-dns-provider-wrap"><label>DNS-Provider</label>
+              <select id="w-dns">${wiz.dnsProviders.map(p => `<option value="${UI.esc(p.id)}" data-code="${UI.esc(p.code)}">${UI.esc(p.name)} (${UI.esc(p.code)})${p.source === 'acme_saved' ? ' · referenziert' : ''}</option>`).join('')}</select>
+              <div class="help">${wiz.dnsProviders.length ? '' : 'Noch kein Provider in acmesh-ui — nutze „In acme.sh gespeicherte Zugangsdaten“ oder lege unter „DNS-Provider“ einen an.'}</div>
+            </div>
+            <div class="form-row" id="w-dns-saved-wrap" style="display:none"><label>Provider-Code (acme.sh)</label>
+              <input type="text" id="w-dns-code" list="w-dns-codes" placeholder="dns_cf">
+              <datalist id="w-dns-codes">${codes.map(c => `<option value="${UI.esc(c)}">`).join('')}</datalist>
+              <div class="help">Es werden keine Secrets gesetzt — acme.sh nutzt die in <span class="tag">account.conf</span> gespeicherten Werte (SAVED_*).${wiz.detected.length ? ' Erkannt: ' + wiz.detected.map(d => '<span class="tag">' + UI.esc(d.code) + '</span>').join(' ') : ''}</div>
+            </div>
           </div>
           <div id="w-challenge-warn"></div>
 
@@ -59,7 +79,7 @@ Object.assign(Pages, (() => {
           </div>
           <div class="btn-row">
             <div class="checkbox"><input type="checkbox" id="w-staging"><label style="margin:0">Staging/Test</label></div>
-            <div class="checkbox"><input type="checkbox" id="w-force"><label style="margin:0">Force</label></div>
+            <div class="checkbox"><input type="checkbox" id="w-force" ${pf && pf.reissueOf ? 'checked' : ''}><label style="margin:0">Force</label></div>
           </div>
 
           <div id="w-preview" style="margin-top:16px"></div>
@@ -72,6 +92,14 @@ Object.assign(Pages, (() => {
     set(html);
 
     const chSel = document.getElementById('w-challenge');
+    const srcSel = document.getElementById('w-dns-source');
+    const dirty = () => document.getElementById('w-submit-btn').disabled = true;
+    const updateDnsSource = () => {
+      const saved = srcSel.value === 'saved';
+      document.getElementById('w-dns-provider-wrap').style.display = saved ? 'none' : '';
+      document.getElementById('w-dns-saved-wrap').style.display = saved ? '' : 'none';
+      dirty();
+    };
     const updateChallenge = () => {
       const v = chSel.value;
       document.getElementById('w-webroot-row').style.display = v === 'webroot' ? '' : 'none';
@@ -80,16 +108,37 @@ Object.assign(Pages, (() => {
       if (v === 'dns-manual') warn.innerHTML = '<div class="alert alert-danger alert-inline"><strong>DNS-Manual</strong> erfordert manuelles Setzen der TXT-Records und ist <u>nicht für automatische Renewals</u> geeignet.</div>';
       else if (v === 'standalone') warn.innerHTML = '<div class="alert alert-warn alert-inline">Standalone bindet <strong>Port 80</strong> — dieser muss frei sein (z. B. Webserver kurz stoppen).</div>';
       else warn.innerHTML = '';
-      document.getElementById('w-submit-btn').disabled = true;
+      dirty();
     };
     chSel.onchange = updateChallenge;
+    srcSel.onchange = updateDnsSource;
     document.getElementById('w-wild').onchange = (e) => { if (e.target.checked) { chSel.value = 'dns'; updateChallenge(); } };
-    ['w-main', 'w-sans', 'w-webroot', 'w-dns', 'w-key', 'w-ca', 'w-staging', 'w-force'].forEach(id => {
-      const node = document.getElementById(id); if (node) node.addEventListener('change', () => document.getElementById('w-submit-btn').disabled = true);
+    ['w-main', 'w-sans', 'w-webroot', 'w-dns', 'w-dns-code', 'w-key', 'w-ca', 'w-staging', 'w-force'].forEach(id => {
+      const node = document.getElementById(id); if (node) node.addEventListener('change', dirty);
     });
     document.getElementById('w-preview-btn').onclick = () => doPreview();
     document.getElementById('w-submit-btn').onclick = () => doIssue();
+
+    applyPrefill(pf, updateDnsSource);
     updateChallenge();
+    updateDnsSource();
+  }
+
+  function applyPrefill(pf, updateDnsSource) {
+    if (!pf) return;
+    document.getElementById('w-main').value = pf.main || '';
+    document.getElementById('w-sans').value = (pf.sans || []).join('\n');
+    document.getElementById('w-wild').checked = !!pf.wildcard;
+    if (pf.challenge) document.getElementById('w-challenge').value = pf.challenge;
+    if (pf.webroot) document.getElementById('w-webroot').value = pf.webroot;
+    if (pf.keyType) document.getElementById('w-key').value = pf.keyType;
+    if (pf.challenge === 'dns' && pf.dnsCode) {
+      // Prefer an existing managed provider with the same code; else use saved mode.
+      const sel = document.getElementById('w-dns');
+      const match = Array.from(sel.options).find(o => o.dataset.code === pf.dnsCode);
+      if (match) { document.getElementById('w-dns-source').value = 'provider'; sel.value = match.value; }
+      else { document.getElementById('w-dns-source').value = 'saved'; document.getElementById('w-dns-code').value = pf.dnsCode; }
+    }
   }
 
   function collectIssue() {
@@ -97,16 +146,26 @@ Object.assign(Pages, (() => {
     const sans = document.getElementById('w-sans').value.split('\n').map(s => s.trim()).filter(Boolean);
     const domains = [main, ...sans];
     if (document.getElementById('w-wild').checked) domains.push('*.' + main);
-    return {
+    const body = {
       domains,
       challenge: document.getElementById('w-challenge').value,
       webroot: document.getElementById('w-webroot').value.trim(),
-      dns_provider_id: document.getElementById('w-dns') ? document.getElementById('w-dns').value : '',
       key_type: document.getElementById('w-key').value,
       ca: document.getElementById('w-ca').value,
       staging: document.getElementById('w-staging').checked,
       force: document.getElementById('w-force').checked,
     };
+    if (body.challenge === 'dns') {
+      const src = document.getElementById('w-dns-source').value;
+      if (src === 'saved') {
+        body.use_saved = true;
+        body.dns_code = document.getElementById('w-dns-code').value.trim();
+      } else {
+        const sel = document.getElementById('w-dns');
+        body.dns_provider_id = sel ? sel.value : '';
+      }
+    }
+    return body;
   }
   async function doPreview() {
     const body = collectIssue(); body.preview = true;
@@ -137,25 +196,70 @@ Object.assign(Pages, (() => {
   // ---------- DNS providers ----------
   async function dns() {
     set('<div class="loading">Lade…</div>');
-    let d;
-    try { d = await API.dnsProviders(); } catch (e) { return UI.apiError(e); }
+    let d, detected = [];
+    try {
+      d = await API.dnsProviders();
+      try { detected = (await API.dnsDetected()).detected || []; } catch (e) { detected = []; }
+    } catch (e) { return UI.apiError(e); }
     const known = d.known || [];
+    const knownArg = JSON.stringify(JSON.stringify(known)).replace(/"/g, '&quot;');
     let html = `<div class="page-head"><h2>DNS-Provider</h2>
-      <button class="btn btn-primary" onclick="Pages.dnsEdit(null, ${JSON.stringify(JSON.stringify(known)).replace(/"/g, '&quot;')})">＋ Provider anlegen</button></div>
-      <div class="alert alert-info alert-inline">Hinweis: acme.sh speichert manche DNS-Zugangsdaten zusätzlich selbst in <span class="tag">account.conf</span>.</div>`;
-    if (!d.providers || !d.providers.length) {
-      html += '<div class="card"><div class="empty"><div class="big">☁</div>Noch kein DNS-Provider konfiguriert.</div></div>';
+      <button class="btn btn-primary" onclick="Pages.dnsEdit(null, ${knownArg})">＋ Provider anlegen</button></div>`;
+
+    // Detected in acme.sh account.conf.
+    if (detected.length) {
+      html += `<div class="card"><div class="card-title">In acme.sh gefunden (account.conf)</div>
+        <p class="muted">Bereits in acme.sh hinterlegte DNS-Zugangsdaten. <strong>Importieren</strong> kopiert sie verschlüsselt in acmesh-ui; <strong>Referenzieren</strong> nutzt sie ohne Kopie (acme.sh bleibt Quelle).</p>
+        <div class="grid grid-2">${detected.map(dp => `
+          <div class="card" style="box-shadow:none">
+            <div class="page-head"><h3 class="mono">${UI.esc(dp.label)}</h3><span class="tag">${UI.esc(dp.code)}</span></div>
+            <dl class="kv">${(dp.vars || []).map(v => `<dt class="mono">${UI.esc(v.name)}</dt><dd class="mono">${v.secret ? '••••••••' : UI.esc(v.masked_value)}</dd>`).join('')}</dl>
+            <div class="btn-row" style="margin-top:10px">
+              <button class="btn btn-sm btn-primary" onclick="Pages.dnsImport('${UI.esc(dp.code)}')">Importieren</button>
+              <button class="btn btn-sm" onclick="Pages.dnsReference('${UI.esc(dp.code)}','${UI.esc(dp.label)}')">Referenzieren</button>
+            </div>
+          </div>`).join('')}</div></div>`;
     } else {
-      html += '<div class="grid grid-2">' + d.providers.map(p => `
-        <div class="card"><div class="page-head"><h3 class="mono">${UI.esc(p.name)}</h3><span class="tag">${UI.esc(p.code)}</span></div>
+      html += `<div class="alert alert-info alert-inline">Hinweis: acme.sh speichert benutzte DNS-Zugangsdaten in <span class="tag">account.conf</span> (SAVED_*). Aktuell wurden dort keine erkannt.</div>`;
+    }
+
+    // Managed/referenced providers in acmesh-ui.
+    html += `<div class="card-title" style="margin-top:18px">In acmesh-ui verwaltet</div>`;
+    if (!d.providers || !d.providers.length) {
+      html += '<div class="card"><div class="empty"><div class="big">☁</div>Noch kein DNS-Provider in acmesh-ui.</div></div>';
+    } else {
+      html += '<div class="grid grid-2">' + d.providers.map(p => {
+        const ref = p.source === 'acme_saved';
+        const badge = ref ? '<span class="badge badge-gray">acme.sh referenziert</span>' : '<span class="badge badge-green">verschlüsselt</span>';
+        return `<div class="card"><div class="page-head"><h3 class="mono">${UI.esc(p.name)}</h3><span class="tag">${UI.esc(p.code)}</span></div>
+          <div style="margin-bottom:8px">${badge}</div>
           ${p.description ? `<p class="muted">${UI.esc(p.description)}</p>` : ''}
-          <dl class="kv">${(p.env || []).map(e => `<dt class="mono">${UI.esc(e.name)}</dt><dd class="mono">${e.secret ? '••••••••' : UI.esc(e.value)}</dd>`).join('')}</dl>
+          ${ref ? '<p class="muted">Nutzt die in acme.sh gespeicherten Zugangsdaten — keine Secrets in acmesh-ui.</p>'
+                : `<dl class="kv">${(p.env || []).map(e => `<dt class="mono">${UI.esc(e.name)}</dt><dd class="mono">${e.secret ? '••••••••' : UI.esc(e.value)}</dd>`).join('')}</dl>`}
           <div class="btn-row" style="margin-top:12px">
-            <button class="btn btn-sm" onclick='Pages.dnsEdit(${JSON.stringify(p)}, ${JSON.stringify(JSON.stringify(known))})'>Bearbeiten</button>
+            ${ref ? '' : `<button class="btn btn-sm" onclick='Pages.dnsEdit(${JSON.stringify(p)}, ${JSON.stringify(JSON.stringify(known))})'>Bearbeiten</button>`}
             <button class="btn btn-sm btn-danger" onclick="Pages.dnsDelete('${UI.esc(p.id)}','${UI.esc(p.name)}')">Löschen</button>
-          </div></div>`).join('') + '</div>';
+          </div></div>`;
+      }).join('') + '</div>';
     }
     set(html);
+  }
+
+  async function dnsImport(code) {
+    try { await API.importDNS(code); UI.toast('Importiert (verschlüsselt)', 'ok'); Pages.dns(); }
+    catch (e) { UI.apiError(e); }
+  }
+  function dnsReference(code, label) {
+    UI.modal({
+      title: 'DNS-Provider referenzieren',
+      confirmLabel: 'Referenz anlegen',
+      bodyHtml: `<p>Legt einen Provider <span class="tag">${UI.esc(code)}</span> an, der die in acme.sh gespeicherten Zugangsdaten nutzt. <strong>Es werden keine Secrets in acmesh-ui gespeichert.</strong></p>`,
+      onConfirm: async () => {
+        await API.createDNS({ name: label + ' (acme.sh)', code, source: 'acme_saved' });
+        UI.toast('Referenz angelegt', 'ok');
+        Pages.dns();
+      },
+    });
   }
 
   function dnsEdit(provider, knownJson) {
@@ -343,8 +447,32 @@ Object.assign(Pages, (() => {
         <div class="card"><div class="card-title">Reload-Vorlagen</div>
           ${(s.reload_commands || []).length ? '<dl class="kv">' + s.reload_commands.map(r => `<dt>${UI.esc(r.name)}</dt><dd class="mono">${UI.esc((r.command || []).join(' '))}</dd>`).join('') + '</dl>' : '<div class="muted">keine</div>'}
         </div>
+        <div class="card"><div class="card-title">Standard-CA setzen</div>
+          <p class="muted">Setzt die acme.sh Default-CA (<span class="tag">--set-default-ca</span>) für neue Zertifikate.</p>
+          <div class="inline">
+            <select id="ca-select" style="max-width:240px">
+              <option value="letsencrypt">Let's Encrypt</option>
+              <option value="zerossl">ZeroSSL</option>
+              <option value="buypass">Buypass</option>
+              <option value="google">Google</option>
+            </select>
+            <button class="btn btn-primary" id="ca-set-btn">Setzen</button>
+          </div>
+        </div>
       </div>`;
     set(html);
+    document.getElementById('ca-set-btn').onclick = () => {
+      const ca = document.getElementById('ca-select').value;
+      UI.modal({
+        title: 'Standard-CA setzen', confirmLabel: 'CA setzen',
+        bodyHtml: `<p>Neue Zertifikate werden künftig bei <span class="tag">${UI.esc(ca)}</span> beantragt.</p>${UI.codeblock('acme.sh --set-default-ca --server ' + ca)}`,
+        onConfirm: async () => {
+          const r = await API.setDefaultCA(ca);
+          UI.toast('Default-CA gesetzt', 'ok');
+          location.hash = '#/jobs/' + r.job_id;
+        },
+      });
+    };
   }
 
   // ---------- System ----------
@@ -455,5 +583,5 @@ Object.assign(Pages, (() => {
     setTimeout(tick, 2000);
   }
 
-  return { newCert, dns, dnsEdit, dnsDelete, jobs, jobDetail, cancelJob, settings, system };
+  return { newCert, dns, dnsEdit, dnsDelete, dnsImport, dnsReference, jobs, jobDetail, cancelJob, settings, system };
 })());

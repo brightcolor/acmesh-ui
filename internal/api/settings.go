@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/bright-color/acmesh-ui/internal/config"
+	"github.com/bright-color/acmesh-ui/internal/jobs"
 )
 
 // SettingsResponse is the read-only view of effective settings shown in the UI.
@@ -58,6 +59,29 @@ func (h *Handlers) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusNotImplemented, "SETTINGS_READ_ONLY",
 		"Settings are read-only at runtime in this version.",
 		"Edit config.yaml and restart the acmesh-ui service to apply changes.")
+}
+
+// SetDefaultCA handles POST /api/acme/default-ca. It runs
+// `acme.sh --set-default-ca --server <ca>` as a job.
+func (h *Handlers) SetDefaultCA(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		CA string `json:"ca"`
+	}
+	if err := decode(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body.", err.Error())
+		return
+	}
+	cmd, err := h.Builder.SetDefaultCA(body.CA)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_CA", "The CA is not valid.", err.Error())
+		return
+	}
+	job, err := h.Jobs.Submit(jobs.Request{Type: "set-default-ca", Command: cmd})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "JOB_SUBMIT_FAILED", "Could not start the job.", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"job_id": job.ID})
 }
 
 // SystemStatus handles GET /api/system. It surfaces filesystem and scheduler

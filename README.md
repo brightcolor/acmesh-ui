@@ -33,11 +33,15 @@ no CDN, no external database.**
 ## ✨ Features
 
 - 📊 **Dashboard** — valid / expiring / expired counts, acme.sh status, recent jobs, next expiries, security warnings.
-- 🛡 **Certificates** — scanned from the acme.sh home and parsed with Go `crypto/x509`: SANs, wildcard, expiry, issuer, serial, fingerprint, key type, file paths.
+- 🛡 **Certificates** — scanned from the acme.sh home and parsed with Go `crypto/x509`: SANs, wildcard, expiry, issuer, serial, fingerprint, key type, file paths, next renewal time.
 - ➕ **Issue wizard** — HTTP-01 webroot, standalone, DNS-01 via DNS-API, DNS-manual (clearly warned). Live command preview with **masked secrets** before execution.
-- ☁ **DNS providers** — env stored **AES-256-GCM encrypted**, masked everywhere, with a curated catalogue (Cloudflare, Hetzner, INWX, Route53, deSEC, netcup, …).
+- ✏️ **Edit / re-issue** — change domains, challenge method, key type or CA; the wizard is pre-filled from the cert's acme.sh config (re-issue = `--issue` again).
+- 🗑 **Delete** — `acme.sh --remove` (+ `--ecc`), with an optional, safety-bounded purge of the on-disk domain directory.
+- 🔎 **Live TLS check** — dials the domain on :443 and compares the **served** certificate against the issued one (catches "installed but not reloaded"). Host restricted to the cert's own domains.
+- 📥 **Downloads** — view/download cert, fullchain and chain as PEM; private-key download gated behind explicit confirmation + audit log.
+- ☁ **DNS providers** — env stored **AES-256-GCM encrypted**, masked everywhere, curated catalogue. **Adopts existing acme.sh DNS settings** from `account.conf`: import (encrypted copy) or reference (no copy — acme.sh stays the source).
 - 📦 **Install & deploy** — `--install-cert` with **allow-listed reload templates** only; `--deploy` with validated hook names.
-- 🔄 **Renewals** — single, force, renew-all. **Respects** the existing acme.sh cron/timer — never creates its own.
+- 🔄 **Renewals & CA** — single, force, renew-all; set the default CA from the UI. **Respects** the existing acme.sh cron/timer — never creates its own.
 - ⚙ **Jobs** — background queue (`max_parallel`), **live SSE logs**, cancel, history, automatic failure classification.
 - 🌙 **Dark-first UI** — responsive admin panel, light mode toggle, embedded — zero runtime dependencies.
 

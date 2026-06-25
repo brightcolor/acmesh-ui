@@ -20,6 +20,36 @@ func (h *Handlers) ListDNSProviders(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// DetectedDNS handles GET /api/dns-providers/detected. It surfaces DNS
+// credentials already stored by acme.sh in account.conf (values masked).
+func (h *Handlers) DetectedDNS(w http.ResponseWriter, r *http.Request) {
+	detected, err := dnsproviders.DetectDNS(h.Cfg.Acme.Home)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "DETECT_FAILED",
+			"Could not read acme.sh account.conf.", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"detected": detected})
+}
+
+// ImportDNS handles POST /api/dns-providers/import. It copies the acme.sh-saved
+// credentials for a provider code into the encrypted store as a managed provider.
+func (h *Handlers) ImportDNS(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := decode(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid request body.", err.Error())
+		return
+	}
+	p, err := h.DNS.ImportFromAccountConf(h.Cfg.Acme.Home, body.Code)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "IMPORT_FAILED", "Could not import the provider.", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"provider": p})
+}
+
 // GetDNSProvider handles GET /api/dns-providers/{id}.
 func (h *Handlers) GetDNSProvider(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")

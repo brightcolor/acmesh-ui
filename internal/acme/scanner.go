@@ -3,6 +3,7 @@ package acme
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -68,6 +69,7 @@ func (s *Scanner) scanDomainDir(dir, dirName string, now time.Time) (certs.Cert,
 	c := certs.Cert{
 		ID:            domain,
 		MainDomain:    domain,
+		Ecc:           strings.HasSuffix(dirName, "_ecc"),
 		DomainDir:     dir,
 		CertPath:      filepath.Join(dir, domain+".cer"),
 		KeyPath:       filepath.Join(dir, domain+".key"),
@@ -101,16 +103,57 @@ func (s *Scanner) scanDomainDir(dir, dirName string, now time.Time) (certs.Cert,
 		}
 	}
 
-	// Parse the per-domain .conf for CA and install hints.
+	// Parse the per-domain .conf for CA, install hints and re-issue parameters.
 	if data, err := os.ReadFile(c.ConfPath); err == nil {
 		conf := ParseDomainConf(string(data))
 		if ca := conf["Le_API"]; ca != "" {
 			c.CA = ca
 		}
 		c.Install = installFromConf(conf)
+		c.Reissue = reissueFromConf(conf, c.KeyType)
+		if ts := parseEpoch(conf["Le_NextRenewTime"]); !ts.IsZero() {
+			c.NextRenew = ts
+		}
 	}
 
 	return c, true
+}
+
+// reissueFromConf derives the original issuance parameters used to pre-fill the
+// re-issue wizard. acme.sh stores the challenge in Le_Webroot:
+//   - "dns_xxx"      -> DNS-01 via that provider code
+//   - an absolute /path -> HTTP-01 webroot
+//   - "no" / empty   -> standalone
+func reissueFromConf(conf map[string]string, keyType string) *certs.ReissueHint {
+	h := &certs.ReissueHint{KeyType: keyType}
+	if kl := conf["Le_Keylength"]; kl != "" {
+		h.KeyType = kl
+	}
+	w := strings.TrimSpace(conf["Le_Webroot"])
+	switch {
+	case strings.HasPrefix(w, "dns_"):
+		h.Challenge = "dns"
+		h.DNSCode = w
+	case strings.HasPrefix(w, "/"):
+		h.Challenge = "webroot"
+		h.Webroot = w
+	default:
+		h.Challenge = "standalone"
+	}
+	return h
+}
+
+// parseEpoch converts a unix-seconds string to a time.Time (zero on failure).
+func parseEpoch(s string) time.Time {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || n <= 0 {
+		return time.Time{}
+	}
+	return time.Unix(n, 0)
 }
 
 func installFromConf(conf map[string]string) *certs.InstallConfig {

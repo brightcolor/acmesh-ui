@@ -106,8 +106,9 @@ const Pages = (() => {
       <td class="mono">${UI.esc(c.key_type || '–')}</td>
       <td><div class="row-actions">
         <a class="btn btn-sm" href="#/certs/${UI.esc(c.id)}">Details</a>
+        <button class="btn btn-sm" onclick="Pages.reissue('${UI.esc(c.id)}')">Edit</button>
         <button class="btn btn-sm" onclick="Pages.confirmRenew('${UI.esc(c.id)}', false)">Renew</button>
-        <button class="btn btn-sm" onclick="Pages.confirmRenew('${UI.esc(c.id)}', true)">Force</button>
+        <button class="btn btn-sm btn-danger" onclick="Pages.confirmDelete('${UI.esc(c.id)}','${UI.esc(c.main_domain)}')">Löschen</button>
       </div></td></tr>`;
   }
 
@@ -137,10 +138,12 @@ const Pages = (() => {
       .filter(p => p[1]);
     let html = `<div class="page-head"><h2 class="mono">${UI.esc(c.main_domain)} ${UI.statusBadge(c.status)}</h2>
       <div class="btn-row">
+        <button class="btn" onclick="Pages.reissue('${UI.esc(c.id)}')">Bearbeiten / Re-Issue</button>
         <button class="btn" onclick="Pages.confirmRenew('${UI.esc(c.id)}', false)">Renew</button>
         <button class="btn" onclick="Pages.confirmRenew('${UI.esc(c.id)}', true)">Force Renew</button>
         <button class="btn" onclick="Pages.installModal('${UI.esc(c.id)}')">Install</button>
         <button class="btn" onclick="Pages.deployModal('${UI.esc(c.id)}')">Deploy</button>
+        <button class="btn btn-danger" onclick="Pages.confirmDelete('${UI.esc(c.id)}','${UI.esc(c.main_domain)}')">Löschen</button>
       </div></div>`;
     if (c.parse_error) html += `<div class="alert alert-danger alert-inline">Parse-Fehler: ${UI.esc(c.parse_error)}</div>`;
     html += `<div class="grid grid-2">
@@ -150,6 +153,7 @@ const Pages = (() => {
         <dt>Status</dt><dd>${UI.statusBadge(c.status)} <span class="muted">${UI.esc(UI.relDays(c.days_remaining))}</span></dd>
         <dt>Gültig ab</dt><dd>${UI.fmtDate(c.not_before)}</dd>
         <dt>Gültig bis</dt><dd>${UI.fmtDate(c.not_after)}</dd>
+        ${c.next_renew && !c.next_renew.startsWith('0001') ? `<dt>Nächster Renewal</dt><dd>${UI.fmtDate(c.next_renew)} <span class="muted">(acme.sh)</span></dd>` : ''}
         <dt>Issuer</dt><dd>${UI.esc(c.issuer || '–')}</dd>
         <dt>Key-Typ</dt><dd class="mono">${UI.esc(c.key_type || '–')}</dd>
         <dt>CA</dt><dd class="mono">${UI.esc(c.ca || '–')}</dd>
@@ -162,8 +166,106 @@ const Pages = (() => {
         <dl class="kv">${paths.map(p => `<dt>${p[0]}</dt><dd class="mono">${UI.esc(p[1])}</dd>`).join('')}</dl>
         ${c.install ? renderInstallConf(c.install) : ''}
       </div></div>`;
+    // Live TLS endpoint check + files cards.
+    html += `<div class="grid grid-2">
+      <div class="card"><div class="page-head"><div class="card-title">Live-Endpoint (TLS)</div>
+        <button class="btn btn-sm" id="tls-btn">Prüfen</button></div>
+        <div class="muted" id="tls-result">Vergleicht das tatsächlich ausgelieferte Zertifikat unter <span class="tag">${UI.esc(c.main_domain)}:443</span> mit dem ausgestellten.</div>
+      </div>
+      <div class="card"><div class="card-title">Dateien</div>
+        <div class="btn-row">
+          ${c.fullchain_path ? `<button class="btn btn-sm" onclick="Pages.viewPem('${UI.esc(c.id)}','fullchain')">Fullchain ansehen</button>` : ''}
+          ${c.cert_path ? `<button class="btn btn-sm" onclick="Pages.viewPem('${UI.esc(c.id)}','cert')">Cert ansehen</button>` : ''}
+          ${c.fullchain_path ? `<a class="btn btn-sm" href="${API.certDownloadUrl(c.id, 'fullchain')}">Fullchain ⬇</a>` : ''}
+          ${c.cert_path ? `<a class="btn btn-sm" href="${API.certDownloadUrl(c.id, 'cert')}">Cert ⬇</a>` : ''}
+          ${c.ca_path ? `<a class="btn btn-sm" href="${API.certDownloadUrl(c.id, 'chain')}">Chain ⬇</a>` : ''}
+          ${c.key_path ? `<button class="btn btn-sm btn-danger" onclick="Pages.downloadKey('${UI.esc(c.id)}','${UI.esc(c.main_domain)}')">Key ⬇</button>` : ''}
+        </div>
+        <div id="pem-view" style="margin-top:12px"></div>
+      </div>
+    </div>`;
+
     html += `<div class="card"><div class="card-title">Letzte Jobs für diese Domain</div>${renderRecentJobs(d.jobs)}</div>`;
     set(html);
+
+    const tlsBtn = document.getElementById('tls-btn');
+    if (tlsBtn) tlsBtn.onclick = () => runTlsCheck(c.id, c.main_domain);
+  }
+
+  async function runTlsCheck(id, host) {
+    const out = document.getElementById('tls-result');
+    out.innerHTML = '<span class="muted">Prüfe…</span>';
+    let r;
+    try { r = await API.tlsCheck(id); } catch (e) { out.innerHTML = `<span class="badge badge-red dot">Fehler</span> ${UI.esc((e && e.message) || '')}`; return; }
+    const s = r.served;
+    if (!s.reachable) {
+      out.innerHTML = `<div class="alert alert-warn alert-inline">${UI.esc(host)}:443 nicht erreichbar.<div class="muted" style="font-size:12px">${UI.esc(s.error || '')}</div></div>`;
+      return;
+    }
+    const badge = r.match
+      ? '<span class="badge badge-green dot">stimmt überein</span>'
+      : '<span class="badge badge-red dot">weicht ab</span>';
+    out.innerHTML = `<div>${badge} ${r.match ? 'Das ausgelieferte Zertifikat entspricht dem ausgestellten.' : 'Anderes Zertifikat ausgeliefert — evtl. Dienst nicht reloaded oder anderer Host.'}</div>
+      <dl class="kv" style="margin-top:10px">
+        <dt>Subject</dt><dd class="mono">${UI.esc(s.subject || '–')}</dd>
+        <dt>Issuer</dt><dd>${UI.esc(s.issuer || '–')}</dd>
+        <dt>Gültig bis</dt><dd>${UI.fmtDate(s.not_after)}</dd>
+        <dt>Fingerprint (served)</dt><dd class="mono" style="font-size:11px">${UI.esc(s.fingerprint || '–')}</dd>
+      </dl>`;
+  }
+
+  async function viewPem(id, file) {
+    const view = document.getElementById('pem-view');
+    view.innerHTML = '<span class="muted">Lade…</span>';
+    try {
+      const r = await API.certPem(id, file);
+      view.innerHTML = `<div class="card-title">${UI.esc(file)} — ${UI.esc(r.path)}</div>${UI.codeblock(r.pem, true)}`;
+    } catch (e) { view.innerHTML = `<span class="badge badge-red dot">Fehler</span> ${UI.esc((e && e.message) || '')}`; }
+  }
+
+  function downloadKey(id, domain) {
+    UI.modal({
+      title: 'Privaten Schlüssel herunterladen', danger: true, confirmLabel: 'Key herunterladen',
+      bodyHtml: `<div class="alert alert-danger alert-inline">Der <strong>private Schlüssel</strong> von <span class="tag">${UI.esc(domain)}</span> wird heruntergeladen. Bewahre ihn sicher auf — wer ihn besitzt, kann sich als dieser Host ausgeben.</div>`,
+      onConfirm: async () => {
+        window.location.href = API.certDownloadUrl(id, 'key', true);
+        UI.closeModal();
+      },
+    });
+  }
+
+  async function confirmDelete(id, domain) {
+    UI.modal({
+      title: 'Zertifikat löschen', danger: true, confirmLabel: 'Zertifikat löschen',
+      bodyHtml: `<p>Entfernt <span class="tag">${UI.esc(domain)}</span> aus der acme.sh-Verwaltung (kein Auto-Renewal mehr).</p>
+        ${UI.codeblock('acme.sh --remove -d ' + domain)}
+        <div class="checkbox" style="margin-top:12px"><input type="checkbox" id="del-purge"><label style="margin:0" for="del-purge">Zertifikatsdateien ebenfalls von der Festplatte löschen</label></div>
+        <div class="alert alert-warn alert-inline" style="margin-top:10px">Installierte Kopien (z. B. in /etc/ssl) bleiben unberührt — nur das acme.sh-Verzeichnis wird betroffen.</div>`,
+      onConfirm: async () => {
+        const purge = document.getElementById('del-purge').checked;
+        const r = await API.deleteCert(id, purge);
+        UI.toast('Löschen gestartet', 'ok');
+        location.hash = '#/jobs/' + r.job_id;
+      },
+    });
+  }
+
+  async function reissue(id) {
+    let c;
+    try { c = (await API.cert(id)).cert; } catch (e) { return UI.apiError(e); }
+    const ri = c.reissue || {};
+    const sans = (c.sans || []).filter(s => s !== c.main_domain && !s.startsWith('*.'));
+    Pages._prefill = {
+      main: c.main_domain,
+      sans,
+      wildcard: (c.sans || []).some(s => s.startsWith('*.')),
+      challenge: ri.challenge || 'dns',
+      webroot: ri.webroot || '',
+      dnsCode: ri.dns_code || '',
+      keyType: ri.key_type || c.key_type || 'ec-256',
+      reissueOf: c.main_domain,
+    };
+    location.hash = '#/new';
   }
   function renderInstallConf(ic) {
     return `<div class="card-title" style="margin-top:18px">Install-Konfiguration</div><dl class="kv">
@@ -221,6 +323,8 @@ const Pages = (() => {
 
   return {
     dashboard, certs, certDetail, confirmRenew, installModal, deployModal,
+    confirmDelete, reissue, viewPem, downloadKey,
+    _prefill: null,
     // extended in pages2.js
   };
 })();

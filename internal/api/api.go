@@ -95,6 +95,14 @@ func (h *Handlers) certs(force bool) ([]certs.Cert, error) {
 	return list, nil
 }
 
+// invalidateCerts forces the next certificate read to re-scan.
+func (h *Handlers) invalidateCerts() {
+	h.mu.Lock()
+	h.certCache = nil
+	h.scannedAt = time.Time{}
+	h.mu.Unlock()
+}
+
 func (h *Handlers) findCert(id string) (certs.Cert, bool) {
 	list, err := h.certs(false)
 	if err != nil {

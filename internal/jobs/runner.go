@@ -2,6 +2,9 @@ package jobs
 
 import (
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -49,7 +52,38 @@ func (m *Manager) runCommand(ctx context.Context, job *Job, req Request, lb *log
 		job.Log = append(job.Log, m.masker.Mask(res.Stderr))
 	}
 
+	// On success, optionally purge the certificate directory. The path is
+	// re-validated against the acme.sh home so a bug elsewhere cannot delete an
+	// arbitrary directory.
+	if job.Status == StatusSuccess && req.PurgeDir != "" {
+		if err := m.purgeDir(req.PurgeDir); err != nil {
+			job.Log = append(job.Log, "purge: "+m.masker.Mask(err.Error()))
+		} else {
+			job.Log = append(job.Log, "purge: removed "+req.PurgeDir)
+		}
+	}
+
 	_ = m.store.save(*job)
+}
+
+// purgeDir removes a certificate directory after re-checking that it lives
+// strictly inside the acme.sh home and is not the home itself.
+func (m *Manager) purgeDir(dir string) error {
+	home := strings.TrimRight(m.client.Home, "/\\")
+	clean := filepath.Clean(dir)
+	if home == "" {
+		return errors.New("acme home not configured; refusing to purge")
+	}
+	if clean == filepath.Clean(home) {
+		return errors.New("refusing to purge the acme.sh home itself")
+	}
+	if !strings.HasPrefix(clean, filepath.Clean(home)+string(filepath.Separator)) {
+		return errors.New("refusing to purge a directory outside the acme.sh home")
+	}
+	if strings.Contains(dir, "..") {
+		return errors.New("refusing to purge a path containing '..'")
+	}
+	return os.RemoveAll(clean)
 }
 
 // classifyFailure produces an admin-friendly summary from exit code and log

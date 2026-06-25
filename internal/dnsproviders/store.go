@@ -29,8 +29,20 @@ type Input struct {
 	Name        string            `json:"name"`
 	Code        string            `json:"code"`
 	Description string            `json:"description"`
-	Env         map[string]string `json:"env"` // name -> plaintext value
+	Source      string            `json:"source"` // managed (default) | acme_saved
+	Env         map[string]string `json:"env"`    // name -> plaintext value
 	SecretNames []string          `json:"secret_names,omitempty"`
+}
+
+// normalizeSource returns a valid source, defaulting to managed. For acme_saved
+// providers any supplied env is discarded (acme.sh supplies the credentials).
+func normalizeSource(in *Input) {
+	if in.Source == SourceAcmeSaved {
+		in.Env = nil
+		in.SecretNames = nil
+		return
+	}
+	in.Source = SourceManaged
 }
 
 // validateInput checks the provider input.
@@ -63,6 +75,7 @@ func isSecret(name string, explicit []string) bool {
 
 // Create stores a new provider and returns its masked representation.
 func (s *Store) Create(in Input) (Provider, error) {
+	normalizeSource(&in)
 	if err := validateInput(in); err != nil {
 		return Provider{}, err
 	}
@@ -72,6 +85,7 @@ func (s *Store) Create(in Input) (Provider, error) {
 		Name:        in.Name,
 		Code:        in.Code,
 		Description: in.Description,
+		Source:      in.Source,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -94,13 +108,24 @@ func (s *Store) Update(id string, in Input) (Provider, error) {
 	if !ok {
 		return Provider{}, fmt.Errorf("provider %s not found", id)
 	}
+	normalizeSource(&in)
 	if err := validateInput(in); err != nil {
 		return Provider{}, err
 	}
 	existing.Name = in.Name
 	existing.Code = in.Code
 	existing.Description = in.Description
+	existing.Source = in.Source
 	existing.UpdatedAt = time.Now()
+
+	// acme_saved providers store no env.
+	if in.Source == SourceAcmeSaved {
+		existing.Env = nil
+		if err := s.db.PutJSON(storage.BucketDNSProviders, id, existing); err != nil {
+			return Provider{}, err
+		}
+		return Masked(existing), nil
+	}
 
 	prev := map[string]EnvVar{}
 	for _, e := range existing.Env {
@@ -212,6 +237,9 @@ func (s *Store) getRaw(id string) (Provider, bool, error) {
 // Masked returns a copy with secret values replaced by the redaction marker.
 func Masked(p Provider) Provider {
 	cp := p
+	if cp.Source == "" {
+		cp.Source = SourceManaged
+	}
 	cp.Env = make([]EnvVar, len(p.Env))
 	for i, e := range p.Env {
 		if e.Secret {
